@@ -2,6 +2,7 @@ import argparse
 import os
 import shutil
 import time
+from tqdm import tqdm
 
 import torch
 import torch.nn as nn
@@ -12,7 +13,8 @@ import torch.utils.data
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import vgg
-
+import dutils
+dutils.init()
 model_names = sorted(name for name in vgg.__dict__
     if name.islower() and not name.startswith("__")
                      and name.startswith("vgg")
@@ -38,8 +40,8 @@ parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
                     help='momentum')
 parser.add_argument('--weight-decay', '--wd', default=5e-4, type=float,
                     metavar='W', help='weight decay (default: 5e-4)')
-parser.add_argument('--print-freq', '-p', default=20, type=int,
-                    metavar='N', help='print frequency (default: 20)')
+parser.add_argument('--print-freq', '-p', default=400, type=int,
+                    metavar='N', help='print frequency (default: 400)')
 parser.add_argument('--resume', default='', type=str, metavar='PATH',
                     help='path to latest checkpoint (default: none)')
 parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
@@ -74,7 +76,8 @@ def main():
         model.cpu()
     else:
         model.cuda()
-
+    
+    # dutils.pause()
     # optionally resume from a checkpoint
     if args.resume:
         if os.path.isfile(args.resume):
@@ -130,7 +133,7 @@ def main():
         validate(val_loader, model, criterion)
         return
 
-    for epoch in range(args.start_epoch, args.epochs):
+    for epoch in tqdm(range(args.start_epoch, args.epochs)):
         adjust_learning_rate(optimizer, epoch)
 
         # train for one epoch
@@ -146,7 +149,8 @@ def main():
             'epoch': epoch + 1,
             'state_dict': model.state_dict(),
             'best_prec1': best_prec1,
-        }, is_best, filename=os.path.join(args.save_dir, 'checkpoint_{}.tar'.format(epoch)))
+        }, is_best, filename=os.path.join(args.save_dir, 'checkpoint_{}.pth'.format(epoch)))
+    print("Best accuracy:", best_prec1)
 
 
 def train(train_loader, model, criterion, optimizer, epoch):
@@ -168,8 +172,8 @@ def train(train_loader, model, criterion, optimizer, epoch):
         data_time.update(time.time() - end)
 
         if args.cpu == False:
-            input = input.cuda(async=True)
-            target = target.cuda(async=True)
+            input = input.cuda()
+            target = target.cuda()
         if args.half:
             input = input.half()
 
@@ -193,7 +197,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
         batch_time.update(time.time() - end)
         end = time.time()
 
-        if i % args.print_freq == 0:
+        if i % args.print_freq == args.print_freq - 1:
             print('Epoch: [{0}][{1}/{2}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
@@ -217,8 +221,8 @@ def validate(val_loader, model, criterion):
     end = time.time()
     for i, (input, target) in enumerate(val_loader):
         if args.cpu == False:
-            input = input.cuda(async=True)
-            target = target.cuda(async=True)
+            input = input.cuda()
+            target = target.cuda()
 
         if args.half:
             input = input.half()
@@ -240,7 +244,7 @@ def validate(val_loader, model, criterion):
         batch_time.update(time.time() - end)
         end = time.time()
 
-        if i % args.print_freq == 0:
+        if i % args.print_freq == args.print_freq - 1:
             print('Test: [{0}/{1}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
@@ -248,12 +252,11 @@ def validate(val_loader, model, criterion):
                       i, len(val_loader), batch_time=batch_time, loss=losses,
                       top1=top1))
 
-    print(' * Prec@1 {top1.avg:.3f}'
-          .format(top1=top1))
+            print(' * Prec@1 {top1.avg:.3f}'.format(top1=top1))
 
     return top1.avg
 
-def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
+def save_checkpoint(state, is_best, filename='checkpoint.pth'):
     """
     Save the training model
     """
