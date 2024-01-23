@@ -71,7 +71,7 @@ def main():
 
     model = vgg.__dict__[args.arch]()
 
-    model.features = torch.nn.DataParallel(model.features)
+    #model.features = torch.nn.DataParallel(model.features)
     if args.cpu:
         model.cpu()
     else:
@@ -93,14 +93,27 @@ def main():
 
     cudnn.benchmark = True
 
-    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                                     std=[0.229, 0.224, 0.225])
+    """
+    mean = torch.tensor([125.31, 122.95, 113.87], device=device).to(dtype)
+    std = torch.tensor([62.99, 62.09, 66.70], device=device).to(dtype)
+    """
+    normalize = transforms.Normalize(mean=[125.31/255., 122.95/255., 113.87/255.],
+                                     std=[62.99/255., 62.09/255., 66.70/255.])
+
+    #normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+    #                                 std=[0.229, 0.224, 0.225])
+    def reflection_pad(t3d):
+        pad = nn.ReflectionPad2d(4)
+        padded = pad(t3d[None,...]) 
+        return padded[0]
 
     train_loader = torch.utils.data.DataLoader(
         datasets.CIFAR10(root='./data', train=True, transform=transforms.Compose([
             transforms.RandomHorizontalFlip(),
-            transforms.RandomCrop(32, 4),
+            #transforms.RandomCrop(32, 4),
             transforms.ToTensor(),
+            reflection_pad,
+            transforms.RandomCrop(32, 4),
             normalize,
         ]), download=True),
         batch_size=args.batch_size, shuffle=True,
@@ -109,6 +122,7 @@ def main():
     val_loader = torch.utils.data.DataLoader(
         datasets.CIFAR10(root='./data', train=False, transform=transforms.Compose([
             transforms.ToTensor(),
+            #reflection_pad,
             normalize,
         ])),
         batch_size=args.batch_size, shuffle=False,
@@ -145,11 +159,14 @@ def main():
         # remember best prec@1 and save checkpoint
         is_best = prec1 > best_prec1
         best_prec1 = max(prec1, best_prec1)
-        save_checkpoint({
-            'epoch': epoch + 1,
-            'state_dict': model.state_dict(),
-            'best_prec1': best_prec1,
-        }, is_best, filename=os.path.join(args.save_dir, 'checkpoint_{}.pth'.format(epoch)))
+        #save_checkpoint({
+        #    'epoch': epoch + 1,
+        #    'state_dict': model.state_dict(),
+        #    'best_prec1': best_prec1,
+        #}, is_best, filename=os.path.join(args.save_dir, 'checkpoint_{}.pth'.format(epoch)))
+        # save_checkpoint(model.state_dict(),is_best, filename=os.path.join(args.save_dir, 'checkpoint_{}.pth'.format(epoch)))
+        if is_best:
+            torch.save(model.state_dict(), os.path.join(args.save_dir, 'checkpoint_{}.pth'.format(epoch)))
     print("Best accuracy:", best_prec1)
 
 
@@ -178,7 +195,9 @@ def train(train_loader, model, criterion, optimizer, epoch):
             input = input.half()
 
         # compute output
+        #input = dutils.hardcode(input = torch.zeros(input.shape[0],3,40,40,device=input.device))
         output = model(input)
+        #dutils.pause()
         loss = criterion(output, target)
 
         # compute gradient and do SGD step
@@ -256,11 +275,11 @@ def validate(val_loader, model, criterion):
 
     return top1.avg
 
-def save_checkpoint(state, is_best, filename='checkpoint.pth'):
-    """
-    Save the training model
-    """
-    torch.save(state, filename)
+#def save_checkpoint(state, is_best, filename='checkpoint.pth'):
+#    """
+#    Save the training model
+#    """
+#    torch.save(state, filename)
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
