@@ -1,2 +1,5 @@
 **/*.egg-info/
 **/__pycache__
+pytorch-vgg-cifar10/save_vgg16_cifar-10/
+pytorch-vgg-cifar10/save_vgg16_cifar-100/
+pytorch-vgg-cifar10/save_vgg16_mnist/
