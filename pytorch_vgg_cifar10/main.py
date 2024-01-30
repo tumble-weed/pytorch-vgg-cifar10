@@ -55,9 +55,84 @@ parser.add_argument('--cpu', dest='cpu', action='store_true',
 parser.add_argument('--save-dir', dest='save_dir',
                     help='The directory used to save the trained models',
                     default='save_temp', type=str)
-
-
+parser.add_argument('--dataset', dest='dataset',
+                    help='The directory used to save the trained models',
+                    default='cifar-10', type=str)
 best_prec1 = 0
+def get_data(dataset):
+    if dataset == 'mnist':
+         def reflection_pad(t3d):
+            pad = nn.ReflectionPad2d(4)
+            padded = pad(t3d[None,...]) 
+            return padded[0]
+         normalize = transforms.Normalize(mean=[0.5, 0.5, 0.5],
+                                         std=[0.5, 0.5, 0.5])
+         def to_3chan(t):
+            assert t.ndim == 3
+            t = t.repeat(3,1,1)
+            return t
+         train_loader = torch.utils.data.DataLoader(
+            datasets.MNIST(root='./data', train=True, transform=transforms.Compose([
+                transforms.Resize((32,32)),
+                #transforms.RandomHorizontalFlip(),
+                #transforms.RandomCrop(32, 4),
+                transforms.ToTensor(),
+                to_3chan,
+                reflection_pad,
+                transforms.RandomCrop(32, 4),
+                normalize,
+            ]), download=True),
+            batch_size=args.batch_size, shuffle=True,
+            num_workers=args.workers, pin_memory=True)
+
+         val_loader = torch.utils.data.DataLoader(
+            datasets.MNIST(root='./data', train=False, transform=transforms.Compose([
+                transforms.Resize((32,32)),
+                transforms.ToTensor(),
+                to_3chan,
+                #reflection_pad,
+                normalize,
+            ])),
+            batch_size=args.batch_size, shuffle=False,
+            num_workers=args.workers, pin_memory=True)
+       
+         pass
+    elif dataset in ['cifar-10','cifar-100']:
+        normalize = transforms.Normalize(mean=[125.31/255., 122.95/255., 113.87/255.],
+                                         std=[62.99/255., 62.09/255., 66.70/255.])
+
+        #normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
+        #                                 std=[0.229, 0.224, 0.225])
+        def reflection_pad(t3d):
+            pad = nn.ReflectionPad2d(4)
+            padded = pad(t3d[None,...]) 
+            return padded[0]
+        if dataset == 'cifar-10':
+            CIFARdatasetclass =  datasets.CIFAR10
+        elif dataset == 'cifar-100':
+             CIFARdatasetclass =  datasets.CIFAR100
+
+        train_loader = torch.utils.data.DataLoader(
+            CIFARdatasetclass(root='./data', train=True, transform=transforms.Compose([
+                transforms.RandomHorizontalFlip(),
+                #transforms.RandomCrop(32, 4),
+                transforms.ToTensor(),
+                reflection_pad,
+                transforms.RandomCrop(32, 4),
+                normalize,
+            ]), download=True),
+            batch_size=args.batch_size, shuffle=True,
+            num_workers=args.workers, pin_memory=True)
+
+        val_loader = torch.utils.data.DataLoader(
+            CIFARdatasetclass(root='./data', train=False, transform=transforms.Compose([
+                transforms.ToTensor(),
+                #reflection_pad,
+                normalize,
+            ])),
+            batch_size=args.batch_size, shuffle=False,
+            num_workers=args.workers, pin_memory=True)
+    return train_loader,val_loader
 
 
 def main():
@@ -68,8 +143,11 @@ def main():
     # Check the save_dir exists or not
     if not os.path.exists(args.save_dir):
         os.makedirs(args.save_dir)
-
-    model = vgg.__dict__[args.arch]()
+    if args.dataset == 'cifar-100':
+        n_classes = 100
+    elif args.dataset in ['cifar-10','mnist']:
+        n_classes = 10
+    model = vgg.__dict__[args.arch](n_classes)
 
     #model.features = torch.nn.DataParallel(model.features)
     if args.cpu:
@@ -97,36 +175,7 @@ def main():
     mean = torch.tensor([125.31, 122.95, 113.87], device=device).to(dtype)
     std = torch.tensor([62.99, 62.09, 66.70], device=device).to(dtype)
     """
-    normalize = transforms.Normalize(mean=[125.31/255., 122.95/255., 113.87/255.],
-                                     std=[62.99/255., 62.09/255., 66.70/255.])
-
-    #normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-    #                                 std=[0.229, 0.224, 0.225])
-    def reflection_pad(t3d):
-        pad = nn.ReflectionPad2d(4)
-        padded = pad(t3d[None,...]) 
-        return padded[0]
-
-    train_loader = torch.utils.data.DataLoader(
-        datasets.CIFAR10(root='./data', train=True, transform=transforms.Compose([
-            transforms.RandomHorizontalFlip(),
-            #transforms.RandomCrop(32, 4),
-            transforms.ToTensor(),
-            reflection_pad,
-            transforms.RandomCrop(32, 4),
-            normalize,
-        ]), download=True),
-        batch_size=args.batch_size, shuffle=True,
-        num_workers=args.workers, pin_memory=True)
-
-    val_loader = torch.utils.data.DataLoader(
-        datasets.CIFAR10(root='./data', train=False, transform=transforms.Compose([
-            transforms.ToTensor(),
-            #reflection_pad,
-            normalize,
-        ])),
-        batch_size=args.batch_size, shuffle=False,
-        num_workers=args.workers, pin_memory=True)
+    train_loader,val_loader = get_data(args.dataset)
 
     # define loss function (criterion) and pptimizer
     criterion = nn.CrossEntropyLoss()
@@ -159,6 +208,7 @@ def main():
         # remember best prec@1 and save checkpoint
         is_best = prec1 > best_prec1
         best_prec1 = max(prec1, best_prec1)
+        print(f'Validation prec1 {prec1}')
         #save_checkpoint({
         #    'epoch': epoch + 1,
         #    'state_dict': model.state_dict(),
@@ -216,7 +266,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
         batch_time.update(time.time() - end)
         end = time.time()
 
-        if i % args.print_freq == args.print_freq - 1:
+        if i % args.print_freq == 0:
             print('Epoch: [{0}][{1}/{2}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
@@ -263,7 +313,7 @@ def validate(val_loader, model, criterion):
         batch_time.update(time.time() - end)
         end = time.time()
 
-        if i % args.print_freq == args.print_freq - 1:
+        if i % args.print_freq == 0:
             print('Test: [{0}/{1}]\t'
                   'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
                   'Loss {loss.val:.4f} ({loss.avg:.4f})\t'
