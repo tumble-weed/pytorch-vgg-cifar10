@@ -134,6 +134,13 @@ def get_data(dataset):
             num_workers=args.workers, pin_memory=True)
     return train_loader,val_loader
 
+def _get_latest_vgg_model(model_dir):
+    import glob
+    all_models = glob.glob(os.path.join(model_dir,'*.pth'))
+    modelnames = [os.path.basename(m) for m in all_models]    
+    epochs = [int(m[len('checkpoint_'):-len('.pth')]) for m in modelnames]
+    ix_max_epoch = max(enumerate(epochs),key=lambda k:k[1])[0]
+    return all_models[ix_max_epoch]
 
 def main():
     global args, best_prec1
@@ -168,7 +175,12 @@ def main():
                   .format(args.evaluate, checkpoint['epoch']))
         else:
             print("=> no checkpoint found at '{}'".format(args.resume))
-
+    if args.evaluate:
+        model_dir = f"save_{args.arch}_{args.dataset}"
+        model_str = _get_latest_vgg_model(model_dir)
+        checkpoint = torch.load(model_str)
+        model.load_state_dict(checkpoint)
+        #dutils.pause()
     cudnn.benchmark = True
 
     """
