@@ -1,3 +1,4 @@
+pytorch_vgg_cifar10/data
 **/*.egg-info/
 **/__pycache__
 pytorch-vgg-cifar10/save_vgg16_cifar-10/*
