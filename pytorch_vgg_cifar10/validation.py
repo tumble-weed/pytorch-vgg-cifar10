@@ -59,81 +59,7 @@ parser.add_argument('--dataset', dest='dataset',
                     help='The directory used to save the trained models',
                     default='cifar-10', type=str)
 best_prec1 = 0
-def get_data(dataset):
-    if dataset == 'mnist':
-         def reflection_pad(t3d):
-            pad = nn.ReflectionPad2d(4)
-            padded = pad(t3d[None,...]) 
-            return padded[0]
-         normalize = transforms.Normalize(mean=[0.5, 0.5, 0.5],
-                                         std=[0.5, 0.5, 0.5])
-         def to_3chan(t):
-            assert t.ndim == 3
-            t = t.repeat(3,1,1)
-            return t
-         train_loader = torch.utils.data.DataLoader(
-            datasets.MNIST(root='./data', train=True, transform=transforms.Compose([
-                transforms.Resize((32,32)),
-                #transforms.RandomHorizontalFlip(),
-                #transforms.RandomCrop(32, 4),
-                transforms.ToTensor(),
-                to_3chan,
-                reflection_pad,
-                transforms.RandomCrop(32, 4),
-                normalize,
-            ]), download=True),
-            batch_size=args.batch_size, shuffle=True,
-            num_workers=args.workers, pin_memory=True)
-
-         val_loader = torch.utils.data.DataLoader(
-            datasets.MNIST(root='./data', train=False, transform=transforms.Compose([
-                transforms.Resize((32,32)),
-                transforms.ToTensor(),
-                to_3chan,
-                #reflection_pad,
-                normalize,
-            ])),
-            batch_size=args.batch_size, shuffle=False,
-            num_workers=args.workers, pin_memory=True)
-       
-         pass
-    elif dataset in ['cifar-10','cifar-100']:
-        normalize = transforms.Normalize(mean=[125.31/255., 122.95/255., 113.87/255.],
-                                         std=[62.99/255., 62.09/255., 66.70/255.])
-
-        #normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-        #                                 std=[0.229, 0.224, 0.225])
-        def reflection_pad(t3d):
-            pad = nn.ReflectionPad2d(4)
-            padded = pad(t3d[None,...]) 
-            return padded[0]
-        if dataset == 'cifar-10':
-            CIFARdatasetclass =  datasets.CIFAR10
-        elif dataset == 'cifar-100':
-             CIFARdatasetclass =  datasets.CIFAR100
-
-        train_loader = torch.utils.data.DataLoader(
-            CIFARdatasetclass(root='./data', train=True, transform=transforms.Compose([
-                transforms.RandomHorizontalFlip(),
-                #transforms.RandomCrop(32, 4),
-                transforms.ToTensor(),
-                reflection_pad,
-                transforms.RandomCrop(32, 4),
-                normalize,
-            ]), download=True),
-            batch_size=args.batch_size, shuffle=True,
-            num_workers=args.workers, pin_memory=True)
-
-        val_loader = torch.utils.data.DataLoader(
-            CIFARdatasetclass(root='./data', train=False, transform=transforms.Compose([
-                transforms.ToTensor(),
-                #reflection_pad,
-                normalize,
-            ])),
-            batch_size=args.batch_size, shuffle=False,
-            num_workers=args.workers, pin_memory=True)
-    return train_loader,val_loader
-
+from pytorch_vgg_cifar10.main import get_data
 def _get_latest_vgg_model(model_dir):
     import glob
     all_models = glob.glob(os.path.join(model_dir,'*.pth'))
@@ -141,7 +67,6 @@ def _get_latest_vgg_model(model_dir):
     epochs = [int(m[len('checkpoint_'):-len('.pth')]) for m in modelnames]
     ix_max_epoch = max(enumerate(epochs),key=lambda k:k[1])[0]
     return all_models[ix_max_epoch]
-
 def main():
     global args, best_prec1
     args = parser.parse_args()
@@ -164,23 +89,19 @@ def main():
     
     # dutils.pause()
     # optionally resume from a checkpoint
-    if args.resume:
-        if os.path.isfile(args.resume):
-            print("=> loading checkpoint '{}'".format(args.resume))
-            checkpoint = torch.load(args.resume)
-            args.start_epoch = checkpoint['epoch']
-            best_prec1 = checkpoint['best_prec1']
-            model.load_state_dict(checkpoint['state_dict'])
-            print("=> loaded checkpoint '{}' (epoch {})"
-                  .format(args.evaluate, checkpoint['epoch']))
-        else:
-            print("=> no checkpoint found at '{}'".format(args.resume))
-    if args.evaluate:
-        model_dir = f"save_{args.arch}_{args.dataset}"
-        model_str = _get_latest_vgg_model(model_dir)
-        checkpoint = torch.load(model_str)
-        model.load_state_dict(checkpoint)
-        #dutils.pause()
+    #if args.resume:
+    #    if os.path.isfile(args.resume):
+    #        print("=> loading checkpoint '{}'".format(args.resume))
+    #        checkpoint = torch.load(args.resume)
+    #        args.start_epoch = checkpoint['epoch']
+    #        best_prec1 = checkpoint['best_prec1']
+    #        model.load_state_dict(checkpoint['state_dict'])
+    #        print("=> loaded checkpoint '{}' (epoch {})"
+    #              .format(args.evaluate, checkpoint['epoch']))
+    #    else:
+    #        print("=> no checkpoint found at '{}'".format(args.resume))
+    model_dir = dutils.TODO
+    model = _get_latest_vgg_model(model_dir)
     cudnn.benchmark = True
 
     """
@@ -205,7 +126,6 @@ def main():
                                 weight_decay=args.weight_decay)
 
     if args.evaluate:
-        args.print_freq = len(val_loader) - 1
         validate(val_loader, model, criterion)
         return
 
@@ -319,8 +239,6 @@ def validate(val_loader, model, criterion):
 
         # measure accuracy and record loss
         prec1 = accuracy(output.data, target)[0]
-        #print(prec1)
-#TODO 323,327
         losses.update(loss.item(), input.size(0))
         top1.update(prec1.item(), input.size(0))
 
@@ -337,6 +255,7 @@ def validate(val_loader, model, criterion):
                       top1=top1))
 
             print(' * Prec@1 {top1.avg:.3f}'.format(top1=top1))
+
     return top1.avg
 
 #def save_checkpoint(state, is_best, filename='checkpoint.pth'):
@@ -361,7 +280,6 @@ class AverageMeter(object):
         self.sum += val * n
         self.count += n
         self.avg = self.sum / self.count
-        #import ipdb;ipdb.set_trace()
 
 
 def adjust_learning_rate(optimizer, epoch):
@@ -377,15 +295,11 @@ def accuracy(output, target, topk=(1,)):
     batch_size = target.size(0)
 
     _, pred = output.topk(maxk, 1, True, True)
-    if maxk == 1:
-        if not (pred.squeeze(-1) == output.argmax(dim=-1)).all():
-            p46()
     pred = pred.t()
     correct = pred.eq(target.view(1, -1).expand_as(pred))
 
     res = []
     for k in topk:
-        #p46()
         correct_k = correct[:k].view(-1).float().sum(0)
         res.append(correct_k.mul_(100.0 / batch_size))
     return res
